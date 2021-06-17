@@ -37,6 +37,8 @@ std::list<int> x_dbg_idx;
 
 std::mutex x_lock;
 
+bool enable_cap = false, enable_dac = false, enable_lsm = false;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 /*
@@ -2827,6 +2829,18 @@ void gatlin::process_cpgf(Module &module) {
   // else
   //   llvm_unreachable("invalid setting!");
   
+  if (knob_gating_type == "cap")
+    enable_cap = true;
+  else if (knob_gating_type == "lsm")
+    enable_dac = true;
+  else if (knob_gating_type == "dac")
+    enable_lsm = true;
+  else{
+    errs() << "enable all!\n";
+    enable_cap = true;
+    enable_dac = true;
+    enable_lsm = true;
+  }  
 
   // add this new methord for cap, lsm and dac
   gating = new GatingNew(module);

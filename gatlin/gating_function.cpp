@@ -10,6 +10,8 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include "utility.h"
+#include "gatlin.h"
+
 
 #include <fstream>
 
@@ -243,7 +245,7 @@ bool findMacroOperand(Instruction *ins, bool (*isMacro)(Value *v), InstructionSe
       Value *v = ins->getOperand(i);
       if (ConstantInt *ci = dyn_cast<ConstantInt>(v)) {
         if (isMacro(ci)) {
-          errs() << "binary op instruction:" << *ins << "\n";
+          //errs() << "binary op instruction:" << *ins << "\n";
           return true;
         }
 
@@ -662,7 +664,7 @@ void traceEveryUsersofVar(Value *argv, bool isField, IndSet *indset,
             //special handle, if the macro appears in a call, add it to targetSet
             // if the aggregate gv that contain the macro appears in a call, we wil trace inter-procedurally
             if (isField) {
-              errs() << "find from gv: " << cif->getName() << "\n";
+              //errs() << "find from gv: " << cif->getName() << "\n";
               funcset->insert(cif);
             }
             else {
@@ -726,7 +728,7 @@ void traceEveryUsersofVar(Value *argv, bool isField, IndSet *indset,
 void traceGVI(GVIS *gvis, FunctionSet *funcset) {
   for (auto gvi : *gvis) {
     GlobalVariable *gv = gvi->first;
-    errs () << "\n\ngv: " << *gv << "\n";
+    //errs () << "\n\ngv: " << *gv << "\n";
     IndSet *indset = gvi->second;
     ValueSet visited;
     bool macro = false;
@@ -876,16 +878,16 @@ void GatingNew::handleStoreInst(StoreInst *si, FunctionSet *fs) {
         //TODO: tarce local variable.
     }
     //traceEveryUsersofVar
-    errs() << "StoreInst Local Var: " << *si << "\n";
-    errs() << "!!!!!!!!!trace the variable!!!!!!!!!!\n";              
+    //errs() << "StoreInst Local Var: " << *si << "\n";
+    //errs() << "!!!!!!!!!trace the variable!!!!!!!!!!\n";              
 }
 
 
 Function* GatingNew::handleCallInst(CallInst *ci) {
   Function *ret = NULL;
-  errs() << "CallInst user: " << *ci << "\n";
+  //errs() << "CallInst user: " << *ci << "\n";
   if (Function *f = ci->getCalledFunction()) {
-    errs() << "target function: " << f->getName() << "\n";
+    //errs() << "target function: " << f->getName() << "\n";
     ret = f;
         //fs->insert(f); //insert the target function
     }
@@ -899,14 +901,14 @@ Function* GatingNew::handleCallInst(CallInst *ci) {
       
       Function *bcf = dyn_cast<Function>(cv->stripPointerCasts());
       if (bcf) {
-        errs() << "target function: " << bcf->getName() << "\n";
+        //errs() << "target function: " << bcf->getName() << "\n";
         ret = bcf;
             //fs->insert(bcf); //insert the target function
             
             //ii->getDebugLoc().print(errs());
-            }
-        else 
-            errs() << "2 We need to handle indirect call!\n";
+      }
+      else 
+        errs() << "2 We need to handle indirect call!\n";
     }
     return ret;
 }
@@ -1151,7 +1153,7 @@ void GatingNew::traceMaskArgument(bool (*isMacro)(Value *v), Instruction * inst)
     for (auto a = f->arg_begin(), b = f->arg_end(); a != b; ++a) {
         num++;
         if (dyn_cast<Value>(a) == v || v == f->getArg(num-1)) {//the value is argument
-          errs() << "backward trace mask function:" << f->getName() << "  index: " << num << "\n";
+          //errs() << "backward trace mask function:" << f->getName() << "  index: " << num << "\n";
           add2Basic(isMacro, f, num);
           return;
         }
@@ -1495,6 +1497,9 @@ again:
 // automatically find permission functions 
 GatingNew::GatingNew(Module& module)
     : GatingFunctionBase(module) {
+
+  FunctionSet allfs;
+
   for (Module::iterator fi = module.begin(), fe = module.end(); fi != fe; fi++) {
     Function *func = dyn_cast<Function>(fi);
     for (Function::iterator bi = func->begin(), be = func->end(); bi != be; bi++) {
@@ -1503,16 +1508,12 @@ GatingNew::GatingNew(Module& module)
         Instruction *inst = dyn_cast<Instruction>(ii);
         if (!inst)
           continue;
-#ifdef  CAP_MAGIC
-        //bool FoundCAP = false;
-        processInstructions(inst, isCAP, &CAPFuncs);
-        //detectWrapperCAP();
-#endif
-#ifdef  DAC_MAGIC
-        //bool FoundDAC = false;
-        processInstructions(inst, isDAC, &DACFuncs);
-                //detectWrapperDAC();
-#endif
+        if(enable_cap)
+          processInstructions(inst, isCAP, &CAPFuncs);
+
+        if(enable_dac)
+          processInstructions(inst, isDAC, &DACFuncs);
+          
       }
     } 
   }
@@ -1524,128 +1525,115 @@ GatingNew::GatingNew(Module& module)
     if (gv->isDeclaration())
       continue;
     StringRef gvn = gv->getName();
-        if (gvn.startswith("__kstrtab") || 
-                gvn.startswith("__tpstrtab") || 
-                gvn.startswith(".str") ||
-                gvn.startswith("llvm.") ||
-                gvn.startswith("__setup_str") ||
-                gvn.startswith("cap_last_cap"))
-            continue;
-/*        if (gvn.startswith("prepare_open.oflag2acc")) {
-          errs() << "found it\n";
-          Constant *c = gv->getInitializer();
-          errs() << *c << "\n";
-          ConstantDataSequential *cds = dyn_cast<ConstantDataSequential>(c);
-          if (cds) {
-            errs() << "is ConstantDataSequential" << *c << "\n";
-            for (unsigned int i = 0; i < cds->getNumElements(); i++) {
-              errs() << cds->getElementAsInteger(i) << "\n";
-            }
-          }
-          
-          errs() << "end of fount if\n";
-        }*/
+    if (gvn.startswith("__kstrtab") || 
+            gvn.startswith("__tpstrtab") || 
+            gvn.startswith(".str") ||
+            gvn.startswith("llvm.") ||
+            gvn.startswith("__setup_str") ||
+            gvn.startswith("cap_last_cap"))
+        continue;
 
-        if (gv->hasInitializer()) {
-#ifdef  CAP_MAGIC
-          resolveInitializer(gv, isCAP, &CAP_gvis);
-#endif
-
-#ifdef  DAC_MAGIC
-//      resolveInitializer(gv, isDAC, &DAC_gvis);  
-#endif        
-        }
+    if (gv->hasInitializer()) {
+      if(enable_cap)
+        resolveInitializer(gv, isCAP, &CAP_gvis);
+      if(enable_dac)
+        resolveInitializer(gv, isDAC, &DAC_gvis);         
+    }
   }
 
 
-#ifdef  CAP_MAGIC
-          traceGVI(&CAP_gvis, &CAPFuncs);
-          detectWrapper(CAPBasic, CAPWrapper);
-#endif
-/*	  
-#ifdef  DAC_MAGIC
-      traceGVI(&DAC_gvis, &DACFuncs);
-      for (auto gvi : DAC_gvis) {
-        errs() << "\n\n\ngv: " << *gvi->first << "\n";
-        for (auto indices : *gvi->second) {
-          errs() << "indices:" ;
-          for (auto index : *indices)
-            errs() << "\t" << index;
-          errs() << "\n";
-        }
+  if(enable_cap){
+    traceGVI(&CAP_gvis, &CAPFuncs);
+    detectWrapper(CAPBasic, CAPWrapper);
+    summary(CAPFuncs, CAPInners, CAPWrapper);
+    allfs.insert(CAPFuncs.begin(), CAPFuncs.end());
+
+    errs() << "\n\nCAP function: \n";
+    for (auto f :CAPFuncs) {
+      if (f!=NULL)
+        errs() << f->getName() << "\n";
+    }
+
+    errs() << "\nCAP Inner: \n"; 
+    for (auto f: CAPInners) {
+      if (f!=NULL)
+        errs() << f->getName() << "\n";
+    }
+
+    errs() << "\nCAP Basic: \n"; 
+    for (auto fpair: CAPBasic) {
+      Function *f = fpair.first;
+      if (f!=NULL)
+        errs() << f->getName() << "\n";
+    }
+
+    errs() << "\nCAP wrapper: \n"; 
+    for (auto fpair: CAPWrapper) {
+      Function *f = fpair.first;
+      if (f!=NULL)
+        errs() << f->getName() << "\n";
+    }
+  }
+
+
+  if(enable_dac){
+    traceGVI(&DAC_gvis, &DACFuncs);
+      // for (auto gvi : DAC_gvis) {
+      //   errs() << "\n\n\ngv: " << *gvi->first << "\n";
+      //   for (auto indices : *gvi->second) {
+      //     errs() << "indices:" ;
+      //     for (auto index : *indices)
+      //       errs() << "\t" << index;
+      //     errs() << "\n";
+      //   }
         
-      }
-      detectWrapper(DACBasic, DACWrapper);
-#endif
-*/
-  //summary(DACFuncs, DACInners, DACWrapper);
-  summary(CAPFuncs, CAPInners, CAPWrapper);
+      // }
+    detectWrapper(DACBasic, DACWrapper);
 
-  errs() << "\n\nCAP function: \n";
-  for (auto f :CAPFuncs) {
-    if (f!=NULL)
-      errs() << f->getName() << "\n";
+    summary(DACFuncs, DACInners, DACWrapper);
+    allfs.insert(DACFuncs.begin(), DACFuncs.end());
+
+    errs() << "\n---------------------------\nDAC function: \n";
+    for (auto f :DACFuncs) {
+      if (f!=NULL)
+        errs() << f->getName() << "\n";
+    }
+
+    errs() << "\nDAC Inner: \n"; 
+    for (auto f: DACInners) {
+      if (f!=NULL)
+        errs() << f->getName() << "\n";
+    }
+
+    errs() << "\nDAC Basic: \n"; 
+    for (auto fpair: DACBasic) {
+      Function *f = fpair.first;
+      if (f!=NULL)
+        errs() << f->getName() << "\n";
+    }
+
+    errs() << "\nDAC wrapper: \n"; 
+    for (auto fpair: DACWrapper) { 
+      Function *f = fpair.first;
+      if (f!=NULL)
+        errs() << f->getName() << "\n";
+    }
   }
 
-#ifdef  TraceInner
-  errs() << "\nCAP Inner: \n"; 
-  for (auto f: CAPInners) {
-    if (f!=NULL)
-      errs() << f->getName() << "\n";
+  //lsm
+  if(enable_lsm) {
+    detectLSM(module);
+    // errs() << "\n\nthe functions that not found before:\n";
+    // for (auto f : fs_result) {
+    //   if (!fs.count(f))
+    //     errs() << f->getName() << "\n";
+    // }
+    allfs.insert(fs_result.begin(), fs_result.end());
   }
 
-  errs() << "\nCAP Basic: \n"; 
-  for (auto fpair: CAPBasic) {
-    Function *f = fpair.first;
-    if (f!=NULL)
-      errs() << f->getName() << "\n";
-  }
-
-  errs() << "\nCAP wrapper: \n"; 
-  for (auto fpair: CAPWrapper) {
-    Function *f = fpair.first;
-    if (f!=NULL)
-      errs() << f->getName() << "\n";
-  }
-
-#endif
-
-  
-/*
-  errs() << "\n---------------------------\nDAC function: \n";
-  for (auto f :DACFuncs) {
-    if (f!=NULL)
-      errs() << f->getName() << "\n";
-  }
-
-#ifdef  TraceInner
-  errs() << "\nDAC Inner: \n"; 
-  for (auto f: DACInners) {
-    if (f!=NULL)
-      errs() << f->getName() << "\n";
-  }
-
-  errs() << "\nDAC Basic: \n"; 
-  for (auto fpair: DACBasic) {
-    Function *f = fpair.first;
-    if (f!=NULL)
-      errs() << f->getName() << "\n";
-  }
-
-  errs() << "\nDAC wrapper: \n"; 
-  for (auto fpair: DACWrapper) { 
-    Function *f = fpair.first;
-    if (f!=NULL)
-      errs() << f->getName() << "\n";
-  }
-#endif
-*/
-  
-  //fs.insert(CAPFuncs.begin(), CAPFuncs.end());
-  //fs.insert(DACFuncs.begin(), DACFuncs.end());
   fs.clear();
 
-  for (auto f: CAPFuncs) {
+  for (auto f: allfs) {
     std::string fnamestr = f->getName().str();
     if((fnamestr.find("perm")!= string::npos || fnamestr.find("cap")!= string::npos
             || fnamestr.find("security")!= string::npos || fnamestr.find("smack_privileged")!= string::npos 
@@ -1665,7 +1653,7 @@ GatingNew::GatingNew(Module& module)
   // }
   FunctionSet to_remove;
 
-  for (auto f : CAPFuncs) {
+  for (auto f : allfs) {
     std::string fnamestr = f->getName().str();
     if(!((fnamestr.find("perm")!= string::npos || fnamestr.find("cap")!= string::npos
             || fnamestr.find("security")!= string::npos || fnamestr.find("smack_privileged")!= string::npos 
@@ -1691,19 +1679,7 @@ GatingNew::GatingNew(Module& module)
   // }
   dump();
 
-  //lsm
-  /*
-  detectLSM(module);
   
-  //fs.insert(wrappers.begin(), wrappers.end());
-
-  errs() << "\n\nthe functions that not found before:\n";
-  for (auto f : fs_result) {
-    if (!fs.count(f))
-      errs() << f->getName() << "\n";
-  }
-  //fs.insert(fs_result.begin(), fs_result.end());
-*/
 
   errs() << "--------------------end dump-----------------\n\n\n";
 

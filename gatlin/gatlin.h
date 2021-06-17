@@ -50,6 +50,8 @@
 
 #define DEBUG_TYPE "gatlin"
 
+extern bool enable_cap, enable_dac, enable_lsm;
+
 #if defined(DEBUG)
 #undef DEBUG
 #define DEBUG 0

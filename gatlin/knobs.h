@@ -10,10 +10,10 @@
 /*
  * command line options
  */
-/*cl::opt<std::string>
+cl::opt<std::string>
     knob_gating_type("gating",
                      cl::desc("gating function: cap/lsm - default: cap"),
-                     cl::init("cap"));*/
+                     cl::init("cap"));
 
 cl::opt<bool> knob_gatlin_critical_var(
     "ccv", cl::desc("check critical variable usage - disabled by default"),
