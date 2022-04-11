@@ -1,4 +1,4 @@
-# Gatlin: Gating Function Checker for Linux Kernel
+# Permission Static Analysis Framework for Linux Kernel
 
 This checker figures out critical resource(callee of direct/indirect callsite,
 global variable use, interesting struct type and field use) by looking at existing
